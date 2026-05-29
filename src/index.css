@@ -34,7 +34,7 @@ body {
 .api-badge.not-set { background: var(--red-bg); color: var(--red-text); border-color: #fecaca; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
-.main { max-width: 860px; margin: 0 auto; padding: 2rem; }
+.main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
 
 .setup-card { background: var(--amber-bg); border: 1px solid #fde68a; border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; display: none; }
 .setup-card.show { display: flex; align-items: flex-start; gap: 12px; }
@@ -47,7 +47,7 @@ body {
 .api-input-row input:focus { outline: none; border-color: var(--blue); }
 .btn-save-api { padding: 8px 16px; background: var(--amber-text); color: white; border: none; border-radius: var(--radius); font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; align-items: start; }
 @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
 
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); overflow: hidden; }

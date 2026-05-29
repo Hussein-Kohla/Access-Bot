@@ -32,16 +32,16 @@ export default function App() {
   const [nameField, setNameField] = useState<string>('الاسم');
   const [checkField, setCheckField] = useState<string>('م ط');
   const [updateValue, setUpdateValue] = useState<boolean>(true);
+  const [ignoreUnchecked, setIgnoreUnchecked] = useState<boolean>(true);
   
   const [image, setImage] = useState<ImageState>({ base64: null, mimeType: 'image/jpeg', url: null });
   const [imgError, setImgError] = useState<string>('');
   const [namesInput, setNamesInput] = useState<string>('');
   
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loadingMsg, setLoadingMsg] = useState<string>('');
   const [results, setResults] = useState<NameResult[]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
   
-  const [customSql, setCustomSql] = useState<string>('');
   const [voiceTranscript, setVoiceTranscript] = useState<string>('');
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const recognitionRef = useRef<any>(null);
@@ -149,7 +149,7 @@ export default function App() {
     if (imageData) parts.push({ inline_data: { mime_type: mimeType, data: imageData } });
     parts.push({ text: prompt });
 
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey;
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=' + apiKey;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -195,10 +195,16 @@ export default function App() {
     if (!image.base64) return;
     if (!apiKey) { setShowModal(true); return; }
     
-    setLoading(true);
+    setLoadingMsg('Gemini بيحلل الصورة... لحظة');
     setImgError('');
     try {
-      const prompt = 'أنت مساعد متخصص في تحليل القوائم الاسمية العربية. استخرج كل الأسماء العربية من هذه الصورة وحدد مين عليه علامة صح أو تيك أو أي علامة تأكيد بجانب اسمه ومين مش عليه. أجب بـ JSON فقط بدون أي نص إضافي ولا backticks ولا markdown. الشكل المطلوب بالضبط: {"names":[{"name":"الاسم كاملاً","checked":true},{"name":"اسم تاني","checked":false}]}';
+      const prompt = `أنت خبير في قراءة المستندات وتحليل الجداول المطبوعة. 
+الصورة المرفقة تحتوي على جدول بأسماء. ستلاحظ أن بعض الأسماء يوجد بجانبها **علامات مرسومة يدوياً بالقلم** (مثل خط أحمر، أو علامة صح، أو خربشة في الأعمدة الجانبية).
+المطلوب:
+1. استخراج جميع الأسماء الموجودة في الجدول.
+2. إذا كان الاسم بجانبه علامة مرسومة يدوياً بالقلم، اجعل حالته (checked: true).
+3. إذا لم يكن بجانبه أي علامة يدوية، اجعل حالته (checked: false).
+التزم بصيغة JSON فقط: {"names":[{"name":"الاسم كاملاً","checked":true},{"name":"اسم آخر","checked":false}]} ولا تضف أي نص آخر.`;
       
       const raw = await callGemini(prompt, image.base64, image.mimeType);
       
@@ -225,7 +231,7 @@ export default function App() {
         setImgError('❌ خطأ: ' + e.message + ' — تأكد من صحة المفتاح ووضوح الصورة');
       }
     }
-    setLoading(false);
+    setLoadingMsg('');
   };
 
   const handleAnalyzeText = () => {
@@ -233,7 +239,7 @@ export default function App() {
     const names = namesInput.split('\n')
       .map(n => n.trim())
       .filter(n => n.length > 0)
-      .map(n => ({ name: n, checked: true }));
+      .map(n => ({ name: n, checked: updateValue }));
     displayResults(names);
   };
   
@@ -241,24 +247,19 @@ export default function App() {
     if (!voiceTranscript.trim()) { showToast('تحدث أولاً لإنشاء الكود'); return; }
     if (!apiKey) { setShowModal(true); return; }
     
-    setLoading(true);
-    setCustomSql('');
+    setLoadingMsg('Gemini بيحلل الصوت... لحظة');
     try {
-      const prompt = `أنت مبرمج قواعد بيانات Access. 
+      const prompt = `أنت مساعد متخصص في تحليل النصوص. 
 المستخدم يقول: "${voiceTranscript}"
-اسم الجدول: "${tableName || 'Table1'}"
-استخرج المطلوب واكتب كود SQL (UPDATE) متوافق مع Access لتنفيذ طلب المستخدم. 
-أرجع النتيجة بصيغة JSON تحتوي على:
-1. الحقل "sql": كود الـ SQL.
-2. الحقل "names": مصفوفة بأسماء الأشخاص المستهدفين.
-التزم بـ JSON فقط ولا تضف نصوص أخرى.`;
+استخرج الأسماء المذكورة، وحدد ما إذا كان المستخدم يريد تأكيدها (دفع/صح = true) أو إلغاءها (لم يدفع/غلط/إلغاء = false).
+التزم بـ JSON فقط وبنفس الهيكلية المطلوبة.`;
       
       const raw = await callGemini(prompt, null, '');
       
       let clean = raw.trim();
       clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
       
-      let parsed: { sql?: string, names?: string[] } | undefined;
+      let parsed: { names?: NameResult[] } | undefined;
       try {
         parsed = JSON.parse(clean);
       } catch(e) {
@@ -266,25 +267,20 @@ export default function App() {
         if (match) parsed = JSON.parse(match[0]);
       }
       
-      if (parsed?.sql) {
-        setCustomSql(parsed.sql);
-        const affectedNames = (parsed.names || []).map(n => ({ name: n, checked: true }));
-        setResults(affectedNames);
-        setShowResults(true);
-        setTimeout(() => document.getElementById('results-card')?.scrollIntoView({ behavior: 'smooth' }), 100);
+      if (parsed?.names && parsed.names.length > 0) {
+        displayResults(parsed.names);
       } else {
-        showToast('❌ لم أتمكن من فهم المطلوب، حاول صياغته بوضوح.');
+        showToast('❌ لم أتمكن من استخراج أسماء من الصوت.');
       }
     } catch (e: any) {
       if (e.message !== 'no_api_key') {
         showToast('❌ خطأ: ' + e.message);
       }
     }
-    setLoading(false);
+    setLoadingMsg('');
   };
 
   const displayResults = (names: NameResult[]) => {
-    setCustomSql('');
     setResults(names);
     setShowResults(true);
     setTimeout(() => {
@@ -292,14 +288,21 @@ export default function App() {
     }, 100);
   };
 
-  const computedCheckedNames = results.filter(n => n.checked).map(n => n.name);
   let computedSqlOutput = '-- لم يتم التعرف على أسماء';
   
-  if (customSql) {
-    computedSqlOutput = customSql;
-  } else if (computedCheckedNames.length > 0) {
-    const inList = computedCheckedNames.map(n => '"' + n.replace(/"/g, '""') + '"').join(', ');
-    computedSqlOutput = `UPDATE [${tableName || 'Table1'}]\nSET [${checkField || 'م ط'}] = ${updateValue ? 'True' : 'False'}\nWHERE [${nameField || 'الاسم'}] IN (${inList});`;
+  if (results.length > 0) {
+    computedSqlOutput = '';
+    const trueNames = results.filter(n => n.checked).map(n => n.name);
+    const falseNames = results.filter(n => !n.checked).map(n => n.name);
+
+    if (trueNames.length > 0) {
+      const inList = trueNames.map(n => '"' + n.replace(/"/g, '""') + '"').join(', ');
+      computedSqlOutput += `UPDATE [${tableName || 'Table1'}]\nSET [${checkField || 'م ط'}] = True\nWHERE [${nameField || 'الاسم'}] IN (${inList});\n\n`;
+    }
+    if (!ignoreUnchecked && falseNames.length > 0) {
+      const inList = falseNames.map(n => '"' + n.replace(/"/g, '""') + '"').join(', ');
+      computedSqlOutput += `UPDATE [${tableName || 'Table1'}]\nSET [${checkField || 'م ط'}] = False\nWHERE [${nameField || 'الاسم'}] IN (${inList});\n`;
+    }
   }
 
   const copySQL = () => {
@@ -313,9 +316,9 @@ export default function App() {
 
   return (
     <>
-      <div className={`loader-overlay ${loading ? 'show' : ''}`}>
+      <div className={`loader-overlay ${loadingMsg ? 'show' : ''}`}>
         <div className="spinner"></div>
-        <div className="loader-text">Gemini بيحلل الصورة... لحظة</div>
+        <div className="loader-text">{loadingMsg}</div>
       </div>
 
       <div className={`toast ${toastShow ? 'show' : ''}`}>{toastMsg}</div>
@@ -409,6 +412,12 @@ export default function App() {
               <option value="false">خطأ (False)</option>
             </select>
           </div>
+          <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid var(--border)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--text2)', userSelect: 'none', width: 'auto' }}>
+              <input type="checkbox" checked={ignoreUnchecked} onChange={(e) => setIgnoreUnchecked(e.target.checked)} style={{ flex: 'none', width: 'auto', margin: 0 }} />
+              تجاهل الأسماء غير المحددة (توليد كود للأسماء اللي دفعت فقط)
+            </label>
+          </div>
         </div>
 
         <div className="grid">
@@ -441,7 +450,7 @@ export default function App() {
               <button 
                 className="btn btn-primary" 
                 onClick={handleAnalyzeImage} 
-                disabled={!image.base64 || loading}
+                disabled={!image.base64 || !!loadingMsg}
               >
                 🔍 حلل الصورة واستخرج الأسماء
               </button>
@@ -489,7 +498,7 @@ export default function App() {
                 <button className="btn" style={{ flex: 1, backgroundColor: isRecording ? '#E83E8C' : '#fff', color: isRecording ? '#fff' : '#333', border: '1px solid #E83E8C' }} onClick={toggleRecording}>
                   {isRecording ? '⏹️ إيقاف التسجيل' : '🎙️ ابدأ التسجيل'}
                 </button>
-                <button className="btn" style={{ flex: 1, backgroundColor: '#E83E8C', color: '#fff', border: 'none' }} onClick={handleAnalyzeVoice} disabled={loading || !voiceTranscript.trim()}>
+                <button className="btn" style={{ flex: 1, backgroundColor: '#E83E8C', color: '#fff', border: 'none' }} onClick={handleAnalyzeVoice} disabled={!!loadingMsg || !voiceTranscript.trim()}>
                   ✨ تحليل الصوت
                 </button>
               </div>
@@ -510,18 +519,18 @@ export default function App() {
               <table className="names-table">
                 <thead><tr><th>#</th><th>الاسم</th><th>الحالة</th></tr></thead>
                 <tbody>
-                  {results.map((n, i) => (
-                    <tr key={i}>
-                      <td style={{ color: 'var(--text3)', fontSize: '12px' }}>{i + 1}</td>
-                      <td><strong>{n.name}</strong></td>
-                      <td>
-                        <span className={`status-badge ${n.checked ? 'status-checked' : 'status-unchecked'}`}>
-                          {n.checked ? '✓ دفع' : '— لم يدفع'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                {(ignoreUnchecked ? results.filter(n => n.checked) : results).map((item, index) => (
+                  <tr key={index}>
+                    <td style={{ color: 'var(--text3)', fontSize: '12px' }}>{index + 1}</td>
+                    <td><strong>{item.name}</strong></td>
+                    <td>
+                      <span className={`status-badge ${item.checked ? 'status-checked' : 'status-unchecked'}`}>
+                        {item.checked ? '✓ دفع' : '— لم يدفع'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
               </table>
             </div>
             <div className="sql-section">
