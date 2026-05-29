@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Edit3, Image as ImageIcon, Copy } from 'lucide-react';
+import { Camera, Edit3, Image as ImageIcon, Copy, Mic } from 'lucide-react';
 import './index.css';
+
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
 
 interface ImageState {
   base64: string | null;
@@ -14,7 +21,7 @@ interface NameResult {
 }
 
 export default function App() {
-  const [apiKey, setApiKey] = useState<string>('AQ.Ab8RN6Jm8kBBsRPoWVwPzpVfVSlPJQgytM3ztBcES73JOrRRAA');
+  const [apiKey, setApiKey] = useState<string>('');
   const [showModal, setShowModal] = useState<boolean>(false);
   const [modalKeyInput, setModalKeyInput] = useState<string>('');
   const [inlineKeyInput, setInlineKeyInput] = useState<string>('');
@@ -34,6 +41,11 @@ export default function App() {
   const [results, setResults] = useState<NameResult[]>([]);
   const [showResults, setShowResults] = useState<boolean>(false);
   
+  const [customSql, setCustomSql] = useState<string>('');
+  const [voiceTranscript, setVoiceTranscript] = useState<string>('');
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const recognitionRef = useRef<any>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
@@ -41,7 +53,45 @@ export default function App() {
       const saved = localStorage.getItem('gemini_api_key');
       if (saved) setApiKey(saved);
     } catch(e) {}
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'ar-EG';
+
+      recognition.onresult = (event: any) => {
+        let text = '';
+        for (let i = 0; i < event.results.length; i++) {
+          text += event.results[i][0].transcript;
+        }
+        setVoiceTranscript(text);
+      };
+
+      recognition.onerror = (e: any) => {
+        console.error('Speech recognition error', e);
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+      
+      recognitionRef.current = recognition;
+    }
   }, []);
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+    } else {
+      setVoiceTranscript('');
+      recognitionRef.current?.start();
+      setIsRecording(true);
+    }
+  };
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -187,7 +237,54 @@ export default function App() {
     displayResults(names);
   };
   
+  const handleAnalyzeVoice = async () => {
+    if (!voiceTranscript.trim()) { showToast('تحدث أولاً لإنشاء الكود'); return; }
+    if (!apiKey) { setShowModal(true); return; }
+    
+    setLoading(true);
+    setCustomSql('');
+    try {
+      const prompt = `أنت مبرمج قواعد بيانات Access. 
+المستخدم يقول: "${voiceTranscript}"
+اسم الجدول: "${tableName || 'Table1'}"
+استخرج المطلوب واكتب كود SQL (UPDATE) متوافق مع Access لتنفيذ طلب المستخدم. 
+أرجع النتيجة بصيغة JSON تحتوي على:
+1. الحقل "sql": كود الـ SQL.
+2. الحقل "names": مصفوفة بأسماء الأشخاص المستهدفين.
+التزم بـ JSON فقط ولا تضف نصوص أخرى.`;
+      
+      const raw = await callGemini(prompt, null, '');
+      
+      let clean = raw.trim();
+      clean = clean.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+      
+      let parsed: { sql?: string, names?: string[] } | undefined;
+      try {
+        parsed = JSON.parse(clean);
+      } catch(e) {
+        const match = clean.match(/\{[\s\S]*\}/);
+        if (match) parsed = JSON.parse(match[0]);
+      }
+      
+      if (parsed?.sql) {
+        setCustomSql(parsed.sql);
+        const affectedNames = (parsed.names || []).map(n => ({ name: n, checked: true }));
+        setResults(affectedNames);
+        setShowResults(true);
+        setTimeout(() => document.getElementById('results-card')?.scrollIntoView({ behavior: 'smooth' }), 100);
+      } else {
+        showToast('❌ لم أتمكن من فهم المطلوب، حاول صياغته بوضوح.');
+      }
+    } catch (e: any) {
+      if (e.message !== 'no_api_key') {
+        showToast('❌ خطأ: ' + e.message);
+      }
+    }
+    setLoading(false);
+  };
+
   const displayResults = (names: NameResult[]) => {
+    setCustomSql('');
     setResults(names);
     setShowResults(true);
     setTimeout(() => {
@@ -197,7 +294,10 @@ export default function App() {
 
   const computedCheckedNames = results.filter(n => n.checked).map(n => n.name);
   let computedSqlOutput = '-- لم يتم التعرف على أسماء';
-  if (computedCheckedNames.length > 0) {
+  
+  if (customSql) {
+    computedSqlOutput = customSql;
+  } else if (computedCheckedNames.length > 0) {
     const inList = computedCheckedNames.map(n => '"' + n.replace(/"/g, '""') + '"').join(', ');
     computedSqlOutput = `UPDATE [${tableName || 'Table1'}]\nSET [${checkField || 'م ط'}] = ${updateValue ? 'True' : 'False'}\nWHERE [${nameField || 'الاسم'}] IN (${inList});`;
   }
@@ -366,6 +466,33 @@ export default function App() {
               <button className="btn btn-green" onClick={handleAnalyzeText}>
                 ✅ اعمل كود SQL للأسماء دي
               </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-icon" style={{backgroundColor: '#FFEBF0', color: '#E83E8C'}}><Mic size={18} /></div>
+              <div className="card-title">
+                <h2>الإدخال الصوتي</h2>
+                <p>تحدث لتحديث القاعدة</p>
+              </div>
+            </div>
+            <div className="card-body">
+              <textarea 
+                className="names-area" 
+                placeholder="اضغط على المايك وتحدث...&#10;مثال: محمد شهر 5 خليه صح وعدل العمود لـ تم"
+                value={voiceTranscript}
+                onChange={(e) => setVoiceTranscript(e.target.value)}
+                style={{ borderColor: isRecording ? '#E83E8C' : '', transition: 'border-color 0.3s' }}
+              ></textarea>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn" style={{ flex: 1, backgroundColor: isRecording ? '#E83E8C' : '#fff', color: isRecording ? '#fff' : '#333', border: '1px solid #E83E8C' }} onClick={toggleRecording}>
+                  {isRecording ? '⏹️ إيقاف التسجيل' : '🎙️ ابدأ التسجيل'}
+                </button>
+                <button className="btn" style={{ flex: 1, backgroundColor: '#E83E8C', color: '#fff', border: 'none' }} onClick={handleAnalyzeVoice} disabled={loading || !voiceTranscript.trim()}>
+                  ✨ تحليل الصوت
+                </button>
+              </div>
             </div>
           </div>
         </div>
