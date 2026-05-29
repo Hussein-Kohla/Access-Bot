@@ -67,7 +67,7 @@ body {
 .preview-img { width: 100%; max-height: 180px; object-fit: contain; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 12px; display: none; }
 .preview-img.show { display: block; }
 
-.names-area { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-family: 'Cairo', sans-serif; font-size: 14px; min-height: 120px; resize: vertical; background: var(--surface); color: var(--text); line-height: 1.8; margin-bottom: 12px; transition: border-color 0.15s; }
+.names-area { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; font-family: 'Cairo', sans-serif; font-size: 14px; min-height: 350px; resize: vertical; background: var(--surface); color: var(--text); line-height: 1.8; margin-bottom: 12px; transition: border-color 0.15s; }
 .names-area:focus { outline: none; border-color: var(--blue); }
 
 .btn { width: 100%; padding: 10px; border: none; border-radius: var(--radius); font-family: 'Cairo', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 7px; }
@@ -103,14 +103,16 @@ body {
 .btn-copy:hover { background: var(--blue-bg); color: var(--blue-text); border-color: var(--blue); }
 .sql-box { background: #1e2330; border-radius: var(--radius); padding: 14px 16px; font-family: 'Courier New', monospace; font-size: 13px; color: #a8dadc; white-space: pre-wrap; word-break: break-all; direction: ltr; line-height: 1.7; }
 
-.instructions { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-top: 1.5rem; }
-.instructions h3 { font-size: 15px; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
-.steps { display: flex; flex-direction: column; gap: 10px; }
-.step { display: flex; gap: 12px; align-items: flex-start; }
-.step-num { width: 26px; height: 26px; background: var(--blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
-.step p { font-size: 13px; line-height: 1.6; color: var(--text2); margin: 0; }
-.step p strong { color: var(--text); }
-.step p code { background: var(--surface2); padding: 1px 6px; border-radius: 5px; font-size: 12px; font-family: monospace; color: var(--blue-text); }
+.instructions { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; margin-top: 2rem; }
+.instructions h3 { font-size: 18px; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 10px; color: var(--text); }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 1.5rem; }
+.step { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; display: flex; gap: 14px; align-items: flex-start; transition: all 0.2s ease; cursor: default; }
+.step:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--blue); background: var(--surface); }
+.step-num { width: 34px; height: 34px; background: linear-gradient(135deg, var(--blue), #3b82f6); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; flex-shrink: 0; box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
+.step-content { flex: 1; margin-top: 5px; }
+.step-content p { font-size: 14px; line-height: 1.7; color: var(--text2); margin: 0; }
+.step-content p strong { color: var(--text); font-weight: 700; }
+.step-content p code { background: var(--blue-bg); padding: 3px 8px; border-radius: 6px; font-size: 13px; font-family: monospace; color: var(--blue-text); font-weight: 700; border: 1px solid #bfdbfe; }
 
 .loader-overlay { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); z-index: 999; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
 .loader-overlay.show { display: flex; }
